@@ -1,5 +1,8 @@
 #!/bin/bash
 
-cd /fuel-ui
+cp node/run_ui_func_tests.sh fuel-ui/
+
+cd fuel-ui
 npm install > npm_install.log
-bash run_real_plugin_tests_on_real_nailgun.sh
+
+bash run_ui_func_tests.sh ${TEST_PATH}
