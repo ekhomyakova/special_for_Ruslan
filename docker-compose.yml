@@ -1,26 +1,83 @@
 version: '2.1'
+
 services:
-  node:
-    container_name: node
-    user: node
+  base:
+    container_name: base
+    user: root
+    env_file:
+      - .env
+    image: base
+    build:
+      context: base
+      args:
+        - TZ=America/Los_Angeles
+    entrypoint: /base/entrypoint.sh
+    healthcheck:
+      test: test -e /fuel-ui/npm_install.log
+    volumes:
+      - ./base:/base
+      - ./fuel-ui:/fuel-ui
+      - ./fuel-web:/fuel-web
+
+  test:
+    container_name: test
+    image: base
+    user: root
+    env_file:
+      - .env
+    volumes:
+      - ./test:/test
+      - ./fuel-ui:/fuel-ui
+      - ./fuel-web:/fuel-web
+    entrypoint: /test/entrypoint.sh
+    ports:
+      - "${NODE_PORT}"
+      - "9000"
+    depends_on:
+      base:
+        condition: service_healthy
+      dev-server:
+        condition: service_healthy
+      selenium:
+        condition: service_started
+
+  db:
+    image: postgres:9.5
+    ports:
+      - "${NAILGUN_DB_PORT}"
+    environment:
+      - POSTGRES_PASSWORD=${DB_ROOTPW}
+      - POSTGRES_USER=${DB_ROOT}
+      - POSTGRES_DATABASE=${NAILGUN_DB}
+
+  dev-server:
+    container_name: dev-server
+    user: root
     env_file:
       - .env
     build:
-      context: node
+      context: dev-server
       args:
-        - TZ=Europe/Czech
+        - FUEL_WEB_REQS=${FUEL_WEB_REQS}
     volumes:
-      - ./node:/node
+      - ./dev-server:/dev-server
       - ./fuel-ui:/fuel-ui
-    entrypoint: /node/entrypoint.sh
-    environment:
-      - TEST_PREFIX=${TEST_PREFIX}
-      - NAILGUN_HOST=${NAILGUN_HOST}
-      - REMOTE_HOST=${NAILGUN_HOST}
+      - ./fuel-web:/fuel-web
+      - ./dev-server/log:/var/log/nailgun
+    entrypoint: /dev-server/entrypoint.sh
     ports:
       - "9057"
-    links:
-      - selenium
+      - "${NAILGUN_PORT}"
+      - "${DEV_SERVER_PORT}"
+    healthcheck:
+      test: curl -s -w %{http_code} -o /dev/null http://dev-server:${NAILGUN_PORT}/api/version | grep -q 403
+      interval: 10s
+      timeout:  5s
+      retries: 10
+
+    depends_on:
+      db:
+        condition: service_started
 
   selenium:
     container_name: selenium
@@ -36,4 +93,4 @@ services:
     user: seluser
     entrypoint: /selenium/entrypoint.sh
     ports:
-      - "4444"
+      - "${SELENIUM_SERVER_PORT}"
